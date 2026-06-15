@@ -5,7 +5,7 @@ import 'providers/app_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/income_input_screen.dart';
 
-const bool kUseDummyData = true;
+const bool kUseDummyData = false;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
