@@ -239,6 +239,72 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
               ]),
             ],
 
+            // 割り勘表示
+            if (e.hasSplit) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFED7AA)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Text('🤝', style: TextStyle(fontSize: 18)),
+                      const SizedBox(width: 8),
+                      const Text('割り勘',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF9A3412))),
+                      const Spacer(),
+                      if (e.splitSettled)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: Text(
+                            '✅ ${e.splitSettledAt != null ? DateFormat("M/d").format(e.splitSettledAt!) : ""} 精算済',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEE2E2),
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: const Text('未精算',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFFDC2626))),
+                        ),
+                    ]),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(children: [
+                        _splitDetailRow('支払総額', '¥${_yen.format(e.amount)}', const Color(0xFF1E293B)),
+                        const Divider(height: 12, color: Color(0xFFFED7AA)),
+                        _splitDetailRow('🙋 自己負担（${e.splitPercent}%）',
+                            '¥${_yen.format(e.selfAmount)}', const Color(0xFFF97316)),
+                        const Divider(height: 12, color: Color(0xFFFED7AA)),
+                        _splitDetailRow(
+                            e.splitSettled ? '💚 パートナーから受取済' : '💚 パートナーから受取予定',
+                            '¥${_yen.format(e.partnerAmount)}',
+                            const Color(0xFF22C55E)),
+                      ]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             // 固定費の翌月金額変更
             if (e.isRecurring) ...[
               const SizedBox(height: 14),
@@ -382,6 +448,12 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
                 color: fg, fontSize: 12, fontWeight: FontWeight.w700)),
       );
 
+  Widget _splitDetailRow(String label, String value, Color valueColor) =>
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: valueColor)),
+      ]);
+
   Widget _detailCard(List<Widget> children) => Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -441,14 +513,14 @@ class _SpecialIncomeEditScreen extends StatefulWidget {
 class _SpecialIncomeEditScreenState extends State<_SpecialIncomeEditScreen> {
   late final TextEditingController _totalCtrl;
   late final TextEditingController _usableCtrl;
+  late final TextEditingController _memoCtrl;
 
   @override
   void initState() {
     super.initState();
-    _totalCtrl = TextEditingController(
-        text: widget.expense.amount.toString());
-    _usableCtrl = TextEditingController(
-        text: (widget.expense.usableAmount ?? 0).toString());
+    _totalCtrl = TextEditingController(text: widget.expense.amount.toString());
+    _usableCtrl = TextEditingController(text: (widget.expense.usableAmount ?? 0).toString());
+    _memoCtrl = TextEditingController(text: widget.expense.memo ?? '');
   }
 
   int get _total => int.tryParse(_totalCtrl.text) ?? 0;
@@ -465,6 +537,7 @@ class _SpecialIncomeEditScreenState extends State<_SpecialIncomeEditScreen> {
           category: widget.expense.category,
           necessity: widget.expense.necessity,
           usableAmount: _usable,
+          memo: _memoCtrl.text.trim().isEmpty ? null : _memoCtrl.text.trim(),
         );
     if (mounted) Navigator.pop(context);
   }
@@ -611,7 +684,30 @@ class _SpecialIncomeEditScreenState extends State<_SpecialIncomeEditScreen> {
                         fontWeight: FontWeight.w900)),
               ]),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 20),
+            const Text('メモ',
+                style: TextStyle(
+                    color: Color(0x80FFFFFF),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _memoCtrl,
+              maxLines: 2,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'メモを入力（任意）',
+                hintStyle: const TextStyle(color: Color(0x66FFFFFF)),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
             SizedBox(
               width: double.infinity,
               height: 54,

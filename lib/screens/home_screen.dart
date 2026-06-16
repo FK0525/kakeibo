@@ -9,6 +9,7 @@ import 'expense_detail_screen.dart';
 import 'income_input_screen.dart';
 import 'history_screen.dart';
 import 'chart_screen.dart';
+import 'split_screen.dart';
 
 final _yen = NumberFormat('#,###', 'ja_JP');
 
@@ -88,6 +89,36 @@ class HomeScreen extends StatelessWidget {
                           Icon(Icons.pie_chart_outline, color: Colors.white, size: 13),
                           SizedBox(width: 4),
                           Text('グラフ', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                        ]),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const SplitScreen())),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF7ED),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFED7AA)),
+                        ),
+                        child: Row(children: [
+                          const Text('🤝', style: TextStyle(fontSize: 12)),
+                          const SizedBox(width: 4),
+                          Text('割勘', style: TextStyle(color: const Color(0xFF9A3412), fontSize: 11, fontWeight: FontWeight.w700)),
+                          if (p.unsettledSplits.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF97316),
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                              child: Text('${p.unsettledSplits.length}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
+                            ),
+                          ],
                         ]),
                       ),
                     ),
@@ -353,6 +384,15 @@ class _IncomeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCarryover = expense.entryType == EntryType.carryover;
+    final isSettlement = expense.entryType == EntryType.splitSettlement;
+    final hasMemo = expense.memo != null && expense.memo!.trim().isNotEmpty;
+    final title = hasMemo ? expense.memo! : expense.displayLabel;
+    final sub = hasMemo ? expense.displayLabel : null;
+
+    String emoji;
+    if (isCarryover) emoji = '↩️';
+    else if (isSettlement) emoji = '🤝';
+    else emoji = '🎁';
 
     return GestureDetector(
       onTap: () => Navigator.push(context,
@@ -361,99 +401,66 @@ class _IncomeCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFF0FDF4), Color(0xFFECFDF5)],
-          ),
+          gradient: const LinearGradient(colors: [Color(0xFFF0FDF4), Color(0xFFECFDF5)]),
           borderRadius: BorderRadius.circular(14),
-          border: Border(
-              left: BorderSide(
-                  color: const Color(0xFF22C55E), width: 3)),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 4,
-                offset: const Offset(0, 1))
+          border: const Border(left: BorderSide(color: Color(0xFF22C55E), width: 3)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 1))],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Center(child: Text(emoji, style: const TextStyle(fontSize: 18))),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('＋¥${_yen.format(expense.amount)}',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF16A34A))),
+                    ],
+                  ),
+                  if (sub != null) ...[
+                    const SizedBox(height: 2),
+                    Text(sub, style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                  ],
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 6, runSpacing: 4, children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(100)),
+                      child: Text(
+                        isCarryover ? '↩️ 繰越' : (isSettlement ? '🤝 精算' : '🎁 収入'),
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(100)),
+                      child: Text(DateFormat('M/d HH:mm').format(expense.date),
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
           ],
         ),
-        child: Row(children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFF22C55E).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Center(
-              child: Text(isCarryover ? '↩️' : '🎁',
-                  style: const TextStyle(fontSize: 18)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(expense.displayLabel,
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B))),
-                const SizedBox(height: 3),
-                Row(children: [
-                  Text(
-                    DateFormat('M/d HH:mm').format(expense.date),
-                    style: const TextStyle(
-                        fontSize: 11, color: Color(0xFF94A3B8)),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: isCarryover
-                          ? const Color(0xFFF5F3FF)
-                          : const Color(0xFFDCFCE7),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      isCarryover ? '繰越' : '特別',
-                      style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: isCarryover
-                              ? const Color(0xFF7C3AED)
-                              : const Color(0xFF16A34A)),
-                    ),
-                  ),
-                ]),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('＋¥${_yen.format(expense.amount)}',
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF16A34A))),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF22C55E).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: const Text('収入',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF16A34A))),
-              ),
-            ],
-          ),
-        ]),
       ),
     );
   }
@@ -467,6 +474,9 @@ class _ExpenseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isRequired = expense.necessity == NecessityType.required;
+    final hasMemo = expense.memo != null && expense.memo!.trim().isNotEmpty;
+    final title = hasMemo ? expense.memo! : expense.displayLabel;
+    final sub = hasMemo ? expense.displayLabel : null;
 
     return GestureDetector(
       onTap: () => Navigator.push(context,
@@ -478,9 +488,9 @@ class _ExpenseCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: expense.isRecurring
-              ? Border(
+              ? const Border(
                   left: BorderSide(
-                      color: const Color(0xFF6366F1), width: 3))
+                      color: Color(0xFF6366F1), width: 3))
               : null,
           boxShadow: [
             BoxShadow(
@@ -489,90 +499,99 @@ class _ExpenseCard extends StatelessWidget {
                 offset: const Offset(0, 1))
           ],
         ),
-        child: Row(children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: isRequired
-                  ? const Color(0xFF2563EB).withOpacity(0.08)
-                  : const Color(0xFFDC2626).withOpacity(0.08),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Center(
-              child: Text(expense.category.emoji,
-                  style: const TextStyle(fontSize: 18)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(expense.displayLabel,
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B))),
-                const SizedBox(height: 3),
-                Row(children: [
-                  Text(
-                    DateFormat('M/d HH:mm').format(expense.date),
-                    style: const TextStyle(
-                        fontSize: 11, color: Color(0xFF94A3B8)),
-                  ),
-                  if (expense.isRecurring) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text('🔁 毎月',
-                          style: TextStyle(
-                              fontSize: 9,
-                              color: Color(0xFF6366F1),
-                              fontWeight: FontWeight.w700)),
-                    ),
-                  ],
-                ]),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('¥${_yen.format(expense.amount)}',
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF1E293B))),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isRequired
-                      ? const Color(0xFF2563EB).withOpacity(0.08)
-                      : const Color(0xFFDC2626).withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: Text(
-                  isRequired ? '要' : '不',
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: isRequired
-                          ? const Color(0xFF2563EB)
-                          : const Color(0xFFDC2626)),
-                ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: isRequired
+                    ? const Color(0xFF2563EB).withOpacity(0.08)
+                    : const Color(0xFFDC2626).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(11),
               ),
-            ],
-          ),
-        ]),
+              child: Center(
+                child: Text(expense.category.emoji, style: const TextStyle(fontSize: 18)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E293B)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '¥${_yen.format(expense.selfAmount)}',
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF1E293B)),
+                      ),
+                    ],
+                  ),
+                  if (sub != null) ...[
+                    const SizedBox(height: 2),
+                    Text(sub,
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF94A3B8))),
+                  ],
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _badge(isRequired ? '要' : '不',
+                          isRequired ? const Color(0xFF2563EB) : const Color(0xFFDC2626),
+                          isRequired ? const Color(0xFFDBEAFE) : const Color(0xFFFEE2E2)),
+                      if (expense.isRecurring)
+                        _badge('🔁 毎月', const Color(0xFF7C3AED), const Color(0xFFEDE9FE)),
+                      if (expense.hasSplit)
+                        _badge(
+                          '🤝 割勘 ¥${_yen.format(expense.selfAmount)}/${_yen.format(expense.amount)}',
+                          const Color(0xFFEA580C),
+                          const Color(0xFFFFF7ED),
+                          borderColor: const Color(0xFFFED7AA),
+                        ),
+                      _badge(
+                        DateFormat('M/d HH:mm').format(expense.date),
+                        const Color(0xFF64748B),
+                        const Color(0xFFF1F5F9),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _badge(String text, Color textColor, Color bgColor, {Color? borderColor}) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(100),
+          border: borderColor != null ? Border.all(color: borderColor) : null,
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w700, color: textColor)),
+      );
 }

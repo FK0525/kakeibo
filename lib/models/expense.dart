@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'split_type.dart';
 
 enum NecessityType { required, unnecessary }
 
 enum ExpenseCategory { music, food, goods, service, fixed, custom }
 
-enum EntryType { expense, specialIncome, carryover }
+enum EntryType { expense, specialIncome, carryover, splitSettlement }
 
 extension ExpenseCategoryExt on ExpenseCategory {
   String get label {
@@ -40,7 +41,13 @@ class Expense {
   final DateTime date;
   final bool isRecurring;
   final EntryType entryType;
-  final int? usableAmount; // 特別収入の使用可能金額
+  final int? usableAmount;
+
+  // 割り勘関連
+  final SplitType splitType;
+  final int splitPercent;
+  final bool splitSettled;
+  final DateTime? splitSettledAt;
 
   Expense({
     required this.id,
@@ -54,23 +61,33 @@ class Expense {
     this.isRecurring = false,
     this.entryType = EntryType.expense,
     this.usableAmount,
+    this.splitType = SplitType.none,
+    this.splitPercent = 0,
+    this.splitSettled = false,
+    this.splitSettledAt,
   });
 
   int get savingsAmount => entryType == EntryType.specialIncome
       ? amount - (usableAmount ?? 0)
       : 0;
 
+  bool get hasSplit => splitType != SplitType.none;
+  int get selfAmount => hasSplit ? (amount * splitPercent / 100).round() : amount;
+  int get partnerAmount => hasSplit ? amount - selfAmount : 0;
+
   String get displayLabel {
     switch (entryType) {
-      case EntryType.specialIncome: return '特別収入';
-      case EntryType.carryover:     return '前月繰越';
-      case EntryType.expense:       return customLabel ?? category.label;
+      case EntryType.specialIncome:    return '特別収入';
+      case EntryType.carryover:        return '前月繰越';
+      case EntryType.splitSettlement:  return '割り勘精算';
+      case EntryType.expense:          return customLabel ?? category.label;
     }
   }
 
   bool get isIncome =>
       entryType == EntryType.specialIncome ||
-      entryType == EntryType.carryover;
+      entryType == EntryType.carryover ||
+      entryType == EntryType.splitSettlement;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -84,6 +101,10 @@ class Expense {
     'isRecurring': isRecurring,
     'entryType': entryType.name,
     'usableAmount': usableAmount,
+    'splitType': splitType.name,
+    'splitPercent': splitPercent,
+    'splitSettled': splitSettled,
+    'splitSettledAt': splitSettledAt?.toIso8601String(),
   };
 
   factory Expense.fromJson(Map<String, dynamic> j) => Expense(
@@ -98,6 +119,14 @@ class Expense {
     isRecurring: j['isRecurring'] ?? false,
     entryType: EntryType.values.byName(j['entryType'] ?? 'expense'),
     usableAmount: j['usableAmount'],
+    splitType: j['splitType'] != null
+        ? SplitType.values.byName(j['splitType'])
+        : SplitType.none,
+    splitPercent: j['splitPercent'] ?? 0,
+    splitSettled: j['splitSettled'] ?? false,
+    splitSettledAt: j['splitSettledAt'] != null
+        ? DateTime.parse(j['splitSettledAt'])
+        : null,
   );
 
   Expense copyWith({
@@ -109,6 +138,10 @@ class Expense {
     String? photoPath,
     bool? isRecurring,
     int? usableAmount,
+    SplitType? splitType,
+    int? splitPercent,
+    bool? splitSettled,
+    DateTime? splitSettledAt,
   }) => Expense(
     id: id,
     amount: amount ?? this.amount,
@@ -121,6 +154,10 @@ class Expense {
     isRecurring: isRecurring ?? this.isRecurring,
     entryType: entryType,
     usableAmount: usableAmount ?? this.usableAmount,
+    splitType: splitType ?? this.splitType,
+    splitPercent: splitPercent ?? this.splitPercent,
+    splitSettled: splitSettled ?? this.splitSettled,
+    splitSettledAt: splitSettledAt ?? this.splitSettledAt,
   );
 
   static List<Expense> listFromJson(String s) =>

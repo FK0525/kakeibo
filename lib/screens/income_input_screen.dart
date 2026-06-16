@@ -17,6 +17,7 @@ class IncomeInputScreen extends StatefulWidget {
 class _IncomeInputScreenState extends State<IncomeInputScreen> {
   final _totalCtrl = TextEditingController();
   final _usableCtrl = TextEditingController();
+  final _memoCtrl = TextEditingController();
 
   int get _total => int.tryParse(_totalCtrl.text.replaceAll(',', '')) ?? 0;
   int get _usable => int.tryParse(_usableCtrl.text.replaceAll(',', '')) ?? 0;
@@ -33,8 +34,9 @@ class _IncomeInputScreenState extends State<IncomeInputScreen> {
     }
 
     final p = context.read<AppProvider>();
+    final memo = _memoCtrl.text.trim().isEmpty ? null : _memoCtrl.text.trim();
     if (widget.isSpecial) {
-      await p.addSpecialIncome(_total, _usable);
+      await p.addSpecialIncome(_total, _usable, memo: memo);
     } else {
       await p.setIncome(_total);
     }
@@ -220,6 +222,31 @@ class _IncomeInputScreenState extends State<IncomeInputScreen> {
                         fontWeight: FontWeight.w900),
                   ),
                 ]),
+              ),
+
+              // メモ
+              const SizedBox(height: 16),
+              const Text('メモ',
+                  style: TextStyle(
+                      color: Color(0x80FFFFFF),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _memoCtrl,
+                maxLines: 2,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'メモを入力（任意）',
+                  hintStyle: const TextStyle(color: Color(0x66FFFFFF)),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.05),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
               ),
             ],
 

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/expense.dart';
 import '../models/monthly_data.dart';
+import '../models/split_type.dart';
 
 const _uuid = Uuid();
 
@@ -27,18 +28,18 @@ class AppProvider extends ChangeNotifier {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
-  // 支出合計（収入系除く）
+  // 支出合計（収入系除く、割り勘は自己負担分のみ）
   int get totalSpent => currentMonthExpenses
       .where((e) => !e.isIncome)
-      .fold(0, (s, e) => s + e.amount);
+      .fold(0, (s, e) => s + e.selfAmount);
 
   int get requiredSpent => currentMonthExpenses
       .where((e) => !e.isIncome && e.necessity == NecessityType.required)
-      .fold(0, (s, e) => s + e.amount);
+      .fold(0, (s, e) => s + e.selfAmount);
 
   int get unnecessarySpent => currentMonthExpenses
       .where((e) => !e.isIncome && e.necessity == NecessityType.unnecessary)
-      .fold(0, (s, e) => s + e.amount);
+      .fold(0, (s, e) => s + e.selfAmount);
 
   // 特別収入の使用可能分合計
   int get specialIncomeUsable => currentMonthExpenses
@@ -62,6 +63,8 @@ class AppProvider extends ChangeNotifier {
 
   bool get showCarryoverNotification =>
       !_monthly.carryoverConfirmed && _lastMonthBudget > 0;
+
+  int get carryoverDisplay => carryoverAmount;
 
   // 使用可能残高 = 予算 + 特別収入使用可能分 + 繰越 - 支出
   int get remainingBudget {
@@ -175,7 +178,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   // 特別収入追加（使用可能金額と貯金を分けて管理）
-  Future<void> addSpecialIncome(int amount, int usableAmount) async {
+  Future<void> addSpecialIncome(int amount, int usableAmount, {String? memo}) async {
     _expenses.insert(0, Expense(
       id: _uuid.v4(),
       amount: amount,
@@ -184,6 +187,7 @@ class AppProvider extends ChangeNotifier {
       date: DateTime.now(),
       entryType: EntryType.specialIncome,
       usableAmount: usableAmount,
+      memo: memo,
     ));
     await _saveExpenses();
     notifyListeners();
@@ -197,6 +201,8 @@ class AppProvider extends ChangeNotifier {
     String? memo,
     String? photoPath,
     bool isRecurring = false,
+    SplitType splitType = SplitType.none,
+    int splitPercent = 0,
   }) async {
     _expenses.insert(0, Expense(
       id: _uuid.v4(),
@@ -208,6 +214,8 @@ class AppProvider extends ChangeNotifier {
       photoPath: photoPath,
       date: DateTime.now(),
       isRecurring: isRecurring,
+      splitType: splitType,
+      splitPercent: splitPercent,
     ));
     await _saveExpenses();
     notifyListeners();
@@ -224,6 +232,8 @@ class AppProvider extends ChangeNotifier {
     String? photoPath,
     bool? isRecurring,
     int? usableAmount,
+    SplitType? splitType,
+    int? splitPercent,
   }) async {
     final idx = _expenses.indexWhere((e) => e.id == id);
     if (idx < 0) return;
@@ -236,7 +246,57 @@ class AppProvider extends ChangeNotifier {
       photoPath: photoPath,
       isRecurring: isRecurring,
       usableAmount: usableAmount,
+      splitType: splitType,
+      splitPercent: splitPercent,
     );
+    await _saveExpenses();
+    notifyListeners();
+  }
+
+  // 未精算の割り勘
+  List<Expense> get unsettledSplits => _expenses
+      .where((e) => e.hasSplit && !e.splitSettled && !e.isIncome)
+      .toList()
+    ..sort((a, b) => b.date.compareTo(a.date));
+
+  // 精算済みの割り勘
+  List<Expense> get settledSplits => _expenses
+      .where((e) => e.hasSplit && e.splitSettled && !e.isIncome)
+      .toList()
+    ..sort((a, b) => (b.splitSettledAt ?? b.date).compareTo(a.splitSettledAt ?? a.date));
+
+  // 未精算合計（受取予定）
+  int get unsettledTotal =>
+      unsettledSplits.fold(0, (s, e) => s + e.partnerAmount);
+
+  // 一括精算
+  Future<void> settleAllSplits() async {
+    if (unsettledSplits.isEmpty) return;
+    final total = unsettledTotal;
+    final now = DateTime.now();
+
+    // 未精算をすべて精算済みに
+    for (final e in unsettledSplits) {
+      final idx = _expenses.indexWhere((x) => x.id == e.id);
+      if (idx >= 0) {
+        _expenses[idx] = _expenses[idx].copyWith(
+          splitSettled: true,
+          splitSettledAt: now,
+        );
+      }
+    }
+
+    // 精算金額を収入として記録
+    _expenses.insert(0, Expense(
+      id: _uuid.v4(),
+      amount: total,
+      category: ExpenseCategory.custom,
+      necessity: NecessityType.required,
+      date: now,
+      entryType: EntryType.splitSettlement,
+      memo: 'パートナーから精算受取',
+    ));
+
     await _saveExpenses();
     notifyListeners();
   }
@@ -253,32 +313,5 @@ class AppProvider extends ChangeNotifier {
     _expenses[idx] = _expenses[idx].copyWith(amount: newAmount);
     await _saveExpenses();
     notifyListeners();
-  }
-  int get carryoverDisplay => carryoverAmount;
-
-  Future<void> loadDummyData() async {
-    if (_monthly.incomeEntered) return;
-    await setIncome(220000);
-    await addExpense(amount: 70000, category: ExpenseCategory.fixed, necessity: NecessityType.required, memo: '家賃', isRecurring: true);
-    await addExpense(amount: 3280, category: ExpenseCategory.food, necessity: NecessityType.required, memo: 'スーパー');
-    await addExpense(amount: 1200, category: ExpenseCategory.food, necessity: NecessityType.unnecessary, memo: 'ランチ外食');
-    await addExpense(amount: 980, category: ExpenseCategory.service, necessity: NecessityType.required, memo: 'サブスク');
-    await addSpecialIncome(50000, 30000);
-    await _saveLastMonthDummy();
-    notifyListeners();
-  }
-
-  Future<void> _saveLastMonthDummy() async {
-    final prefs = await SharedPreferences.getInstance();
-    final now = DateTime.now();
-    final lastKey = '${now.year}-${(now.month - 1).toString().padLeft(2, '0')}';
-    final lastMonthData = MonthlyData(monthKey: lastKey, income: 220000, incomeEntered: true);
-    await prefs.setString('monthly_$lastKey', MonthlyData.toJsonString(lastMonthData));
-    _expenses.addAll([
-      Expense(id: 'dummy_last_1', amount: 70000, category: ExpenseCategory.fixed, necessity: NecessityType.required, date: DateTime(now.year, now.month - 1, 1), isRecurring: true),
-      Expense(id: 'dummy_last_2', amount: 10000, category: ExpenseCategory.food, necessity: NecessityType.required, date: DateTime(now.year, now.month - 1, 15)),
-    ]);
-    await _saveExpenses();
-    _lastMonthBudget = lastMonthData.availableBudget;
   }
 }

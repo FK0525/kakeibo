@@ -23,7 +23,7 @@ class KakeiboApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '家計簿',
+      title: 'WymV',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -46,19 +46,11 @@ class _RootScreen extends StatefulWidget {
 
 class _RootScreenState extends State<_RootScreen> {
   bool _incomeShown = false;
-  bool _dummyLoaded = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final p = context.watch<AppProvider>();
-
-    if (p.loaded && kUseDummyData && !_dummyLoaded) {
-      _dummyLoaded = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await p.loadDummyData();
-      });
-    }
 
     if (p.loaded && p.shouldShowIncomeInput && !_incomeShown) {
       _incomeShown = true;
