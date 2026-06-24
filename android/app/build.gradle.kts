@@ -23,9 +23,18 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // ランチャー表示名（デフォルト＝本番）。debug ビルドのみ下で上書き
+        manifestPlaceholders["appLabel"] = "WymV"
     }
 
     buildTypes {
+        debug {
+            // 開発用ビルドは本番アプリ（com.example.kakeibo）と別パッケージにして
+            // インストール衝突によるデータ消失を防ぐ
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            manifestPlaceholders["appLabel"] = "WymV (dev)"
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.

@@ -1,31 +1,34 @@
 import 'dart:convert';
 import 'split_type.dart';
+import 'transport_means.dart';
 
 enum NecessityType { required, unnecessary }
 
-enum ExpenseCategory { music, food, goods, service, fixed, custom }
+enum ExpenseCategory { music, food, goods, service, transport, fixed, custom }
 
 enum EntryType { expense, income, specialIncome, carryover, splitSettlement }
 
 extension ExpenseCategoryExt on ExpenseCategory {
   String get label {
     switch (this) {
-      case ExpenseCategory.music:   return '音楽';
-      case ExpenseCategory.food:    return '食事';
-      case ExpenseCategory.goods:   return 'もの';
-      case ExpenseCategory.service: return 'サービス';
-      case ExpenseCategory.fixed:   return '固定費';
-      case ExpenseCategory.custom:  return 'その他';
+      case ExpenseCategory.music:     return '音楽';
+      case ExpenseCategory.food:      return '食事';
+      case ExpenseCategory.goods:     return 'もの';
+      case ExpenseCategory.service:   return 'サービス';
+      case ExpenseCategory.transport: return '交通費';
+      case ExpenseCategory.fixed:     return '固定費';
+      case ExpenseCategory.custom:    return 'その他';
     }
   }
   String get emoji {
     switch (this) {
-      case ExpenseCategory.music:   return '🎵';
-      case ExpenseCategory.food:    return '🍽️';
-      case ExpenseCategory.goods:   return '📦';
-      case ExpenseCategory.service: return '💻';
-      case ExpenseCategory.fixed:   return '🏠';
-      case ExpenseCategory.custom:  return '✏️';
+      case ExpenseCategory.music:     return '🎵';
+      case ExpenseCategory.food:      return '🍽️';
+      case ExpenseCategory.goods:     return '📦';
+      case ExpenseCategory.service:   return '💻';
+      case ExpenseCategory.transport: return '🚃';
+      case ExpenseCategory.fixed:     return '🏠';
+      case ExpenseCategory.custom:    return '✏️';
     }
   }
 }
@@ -42,6 +45,11 @@ class Expense {
   final bool isRecurring;
   final EntryType entryType;
   final int? usableAmount;
+
+  // 交通費関連
+  final TransportMeans? transportMeans;
+  final String? transportFrom;
+  final String? transportTo;
 
   // 割り勘関連
   final SplitType splitType;
@@ -61,11 +69,23 @@ class Expense {
     this.isRecurring = false,
     this.entryType = EntryType.expense,
     this.usableAmount,
+    this.transportMeans,
+    this.transportFrom,
+    this.transportTo,
     this.splitType = SplitType.none,
     this.splitPercent = 0,
     this.splitSettled = false,
     this.splitSettledAt,
   });
+
+  // 交通費の経路表示（出発地 → 行先）
+  String? get transportRoute {
+    if (category != ExpenseCategory.transport) return null;
+    final from = (transportFrom ?? '').trim();
+    final to = (transportTo ?? '').trim();
+    if (from.isEmpty && to.isEmpty) return null;
+    return '${from.isEmpty ? '?' : from} → ${to.isEmpty ? '?' : to}';
+  }
 
   int get savingsAmount => entryType == EntryType.specialIncome
       ? amount - (usableAmount ?? 0)
@@ -103,6 +123,9 @@ class Expense {
     'isRecurring': isRecurring,
     'entryType': entryType.name,
     'usableAmount': usableAmount,
+    'transportMeans': transportMeans?.name,
+    'transportFrom': transportFrom,
+    'transportTo': transportTo,
     'splitType': splitType.name,
     'splitPercent': splitPercent,
     'splitSettled': splitSettled,
@@ -121,6 +144,11 @@ class Expense {
     isRecurring: j['isRecurring'] ?? false,
     entryType: EntryType.values.byName(j['entryType'] ?? 'expense'),
     usableAmount: j['usableAmount'],
+    transportMeans: j['transportMeans'] != null
+        ? TransportMeans.values.byName(j['transportMeans'])
+        : null,
+    transportFrom: j['transportFrom'],
+    transportTo: j['transportTo'],
     splitType: j['splitType'] != null
         ? SplitType.values.byName(j['splitType'])
         : SplitType.none,
@@ -140,6 +168,9 @@ class Expense {
     String? photoPath,
     bool? isRecurring,
     int? usableAmount,
+    TransportMeans? transportMeans,
+    String? transportFrom,
+    String? transportTo,
     SplitType? splitType,
     int? splitPercent,
     bool? splitSettled,
@@ -156,6 +187,9 @@ class Expense {
     isRecurring: isRecurring ?? this.isRecurring,
     entryType: entryType,
     usableAmount: usableAmount ?? this.usableAmount,
+    transportMeans: transportMeans ?? this.transportMeans,
+    transportFrom: transportFrom ?? this.transportFrom,
+    transportTo: transportTo ?? this.transportTo,
     splitType: splitType ?? this.splitType,
     splitPercent: splitPercent ?? this.splitPercent,
     splitSettled: splitSettled ?? this.splitSettled,

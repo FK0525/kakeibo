@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:convert';
 import '../models/expense.dart';
 import '../models/monthly_data.dart';
 import '../models/split_type.dart';
+import '../models/transport_means.dart';
 
 const _uuid = Uuid();
 
@@ -11,7 +13,8 @@ class AppProvider extends ChangeNotifier {
   MonthlyData _monthly = MonthlyData(monthKey: _monthKey(DateTime.now()));
   List<Expense> _expenses = [];
   bool _loaded = false;
-  int _lastMonthBudget = 0;
+  // 全月の月次データ（使用可能残高の繰越を積み上げ計算するために保持）
+  final Map<String, MonthlyData> _monthlyMap = {};
 
   MonthlyData get monthly => _monthly;
   List<Expense> get expenses => _expenses;
@@ -58,18 +61,68 @@ class AppProvider extends ChangeNotifier {
       .where((e) => e.entryType == EntryType.specialIncome)
       .fold(0, (s, e) => s + e.savingsAmount);
 
-  // 繰越額
-  int get carryoverAmount {
-    final now = DateTime.now();
-    final lastKey = _monthKey(DateTime(now.year, now.month - 1));
-    final lastSpent = _expenses
-        .where((e) => _monthKey(e.date) == lastKey && !e.isIncome)
+  // 集計対象の全月キー（月次データ・支出の両方から収集して昇順）
+  List<String> get _activeMonthKeys {
+    final set = <String>{};
+    set.addAll(_monthlyMap.keys);
+    for (final e in _expenses) {
+      set.add(_monthKey(e.date));
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  // その月の通常収入（Expense記録を優先、なければ旧 monthly.income）
+  int _incomeForMonth(String key) {
+    final fromExpenses = _expenses
+        .where((e) =>
+            _monthKey(e.date) == key && e.entryType == EntryType.income)
         .fold(0, (s, e) => s + e.amount);
-    return _lastMonthBudget - lastSpent;
+    if (fromExpenses > 0) return fromExpenses;
+    return _monthlyMap[key]?.income ?? 0;
+  }
+
+  // その月の固定費合計
+  int _fixedCostForMonth(String key) => _expenses
+      .where((e) =>
+          _monthKey(e.date) == key &&
+          !e.isIncome &&
+          e.category == ExpenseCategory.fixed)
+      .fold(0, (s, e) => s + e.selfAmount);
+
+  // その月の使用可能予算 = (収入 - 固定費) ÷ 2
+  int _budgetForMonth(String key) {
+    final base = _incomeForMonth(key) - _fixedCostForMonth(key);
+    return (base / 2).floor();
+  }
+
+  int _specialUsableForMonth(String key) => _expenses
+      .where((e) =>
+          _monthKey(e.date) == key && e.entryType == EntryType.specialIncome)
+      .fold(0, (s, e) => s + (e.usableAmount ?? 0));
+
+  // その月の支出（収入・固定費を除く）
+  int _spentForMonth(String key) => _expenses
+      .where((e) =>
+          _monthKey(e.date) == key &&
+          !e.isIncome &&
+          e.category != ExpenseCategory.fixed)
+      .fold(0, (s, e) => s + e.selfAmount);
+
+  // 繰越額 = 今月より前の全月の残高を積み上げた額（毎月きちんと繰り越される）
+  int get carryoverAmount {
+    final cur = _monthKey(DateTime.now());
+    int carry = 0;
+    for (final k in _activeMonthKeys) {
+      if (k.compareTo(cur) >= 0) break;
+      carry =
+          _budgetForMonth(k) + _specialUsableForMonth(k) + carry - _spentForMonth(k);
+    }
+    return carry;
   }
 
   bool get showCarryoverNotification =>
-      !_monthly.carryoverConfirmed && _lastMonthBudget > 0;
+      !_monthly.carryoverConfirmed && carryoverAmount != 0;
 
   int get carryoverDisplay => carryoverAmount;
 
@@ -97,19 +150,16 @@ class AppProvider extends ChangeNotifier {
   }
 
   // 使用可能残高 = 予算 + 特別収入使用可能分 + 繰越 - 支出（固定費除く）
-  int get remainingBudget {
-    final base = availableBudget + specialIncomeUsable - totalSpent;
-    if (showCarryoverNotification) return base + carryoverAmount;
-    return base;
-  }
+  // 繰越は確定（✕）の有無に関わらず常に残高へ反映され、月をまたいでも0にならない
+  int get remainingBudget =>
+      availableBudget + specialIncomeUsable + carryoverAmount - totalSpent;
 
   // 今月の貯金予定 = 通常貯金 + 特別収入貯金分
   int get totalSavings => savingsTarget + specialIncomeSavings;
 
   double get budgetUsageRatio {
-    final budget = availableBudget +
-        specialIncomeUsable +
-        (showCarryoverNotification ? carryoverAmount : 0);
+    final budget =
+        availableBudget + specialIncomeUsable + carryoverAmount;
     if (budget <= 0) return 0;
     return (totalSpent / budget).clamp(0.0, 1.0);
   }
@@ -123,20 +173,21 @@ class AppProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final key = _monthKey(DateTime.now());
 
-    final mStr = prefs.getString('monthly_$key');
-    _monthly = mStr != null
-        ? MonthlyData.fromJsonString(mStr)
-        : MonthlyData(monthKey: key);
+    // すべての月次データを読み込む（繰越の積み上げ計算に使用）
+    _monthlyMap.clear();
+    for (final k in prefs.getKeys()) {
+      if (!k.startsWith('monthly_')) continue;
+      final s = prefs.getString(k);
+      if (s == null) continue;
+      final d = MonthlyData.fromJsonString(s);
+      _monthlyMap[d.monthKey] = d;
+    }
+
+    _monthly = _monthlyMap[key] ?? MonthlyData(monthKey: key);
+    _monthlyMap[key] = _monthly;
 
     final eStr = prefs.getString('expenses');
     if (eStr != null) _expenses = Expense.listFromJson(eStr);
-
-    final now = DateTime.now();
-    final lastKey = _monthKey(DateTime(now.year, now.month - 1));
-    final lastMStr = prefs.getString('monthly_$lastKey');
-    if (lastMStr != null) {
-      _lastMonthBudget = MonthlyData.fromJsonString(lastMStr).availableBudget;
-    }
 
     await _applyRecurringExpenses();
     _loaded = true;
@@ -197,6 +248,7 @@ class AppProvider extends ChangeNotifier {
       memo: memo,
     ));
     _monthly = _monthly.copyWith(incomeEntered: true);
+    _monthlyMap[_monthly.monthKey] = _monthly;
     await _saveExpenses();
     await _saveMonthly();
     notifyListeners();
@@ -213,6 +265,7 @@ class AppProvider extends ChangeNotifier {
       entryType: EntryType.carryover,
     ));
     _monthly = _monthly.copyWith(carryoverConfirmed: true);
+    _monthlyMap[_monthly.monthKey] = _monthly;
     await _saveExpenses();
     await _saveMonthly();
     notifyListeners();
@@ -242,6 +295,9 @@ class AppProvider extends ChangeNotifier {
     String? memo,
     String? photoPath,
     bool isRecurring = false,
+    TransportMeans? transportMeans,
+    String? transportFrom,
+    String? transportTo,
     SplitType splitType = SplitType.none,
     int splitPercent = 0,
   }) async {
@@ -255,6 +311,9 @@ class AppProvider extends ChangeNotifier {
       photoPath: photoPath,
       date: DateTime.now(),
       isRecurring: isRecurring,
+      transportMeans: transportMeans,
+      transportFrom: transportFrom,
+      transportTo: transportTo,
       splitType: splitType,
       splitPercent: splitPercent,
     ));
@@ -273,6 +332,9 @@ class AppProvider extends ChangeNotifier {
     String? photoPath,
     bool? isRecurring,
     int? usableAmount,
+    TransportMeans? transportMeans,
+    String? transportFrom,
+    String? transportTo,
     SplitType? splitType,
     int? splitPercent,
   }) async {
@@ -287,6 +349,9 @@ class AppProvider extends ChangeNotifier {
       photoPath: photoPath,
       isRecurring: isRecurring,
       usableAmount: usableAmount,
+      transportMeans: transportMeans,
+      transportFrom: transportFrom,
+      transportTo: transportTo,
       splitType: splitType,
       splitPercent: splitPercent,
     );
@@ -354,5 +419,54 @@ class AppProvider extends ChangeNotifier {
     _expenses[idx] = _expenses[idx].copyWith(amount: newAmount);
     await _saveExpenses();
     notifyListeners();
+  }
+
+  // ── データのバックアップ（エクスポート／インポート）──
+
+  // 全データを JSON 文字列として書き出す
+  String exportJson() {
+    final monthly = <String, dynamic>{};
+    for (final entry in _monthlyMap.entries) {
+      monthly[entry.key] = entry.value.toJson();
+    }
+    return const JsonEncoder.withIndent('  ').convert({
+      'app': 'kakeibo',
+      'version': 1,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'expenses': _expenses.map((e) => e.toJson()).toList(),
+      'monthly': monthly,
+    });
+  }
+
+  // JSON 文字列からデータを復元する（既存データは置き換え）
+  Future<void> importJson(String jsonStr) async {
+    final data = jsonDecode(jsonStr.trim());
+    if (data is! Map || data['app'] != 'kakeibo') {
+      throw const FormatException('このデータは家計簿のバックアップではありません');
+    }
+    final expensesJson = data['expenses'];
+    final monthlyJson = data['monthly'];
+    if (expensesJson is! List || monthlyJson is! Map) {
+      throw const FormatException('バックアップデータの形式が正しくありません');
+    }
+    // 先に全件パースして形式を検証（失敗時は書き込まずに中断）
+    final expenses = expensesJson
+        .map((e) => Expense.fromJson(e as Map<String, dynamic>))
+        .toList();
+    final monthly = <String, MonthlyData>{};
+    monthlyJson.forEach((k, v) {
+      monthly[k as String] = MonthlyData.fromJson(v as Map<String, dynamic>);
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    for (final k in prefs.getKeys().toList()) {
+      if (k.startsWith('monthly_')) await prefs.remove(k);
+    }
+    await prefs.setString('expenses', Expense.listToJson(expenses));
+    for (final entry in monthly.entries) {
+      await prefs.setString(
+          'monthly_${entry.key}', MonthlyData.toJsonString(entry.value));
+    }
+    await load();
   }
 }

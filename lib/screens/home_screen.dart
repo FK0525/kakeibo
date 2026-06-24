@@ -4,12 +4,14 @@ import 'package:intl/intl.dart';
 import 'dart:io';
 import '../providers/app_provider.dart';
 import '../models/expense.dart';
+import '../models/transport_means.dart';
 import 'expense_input_screen.dart';
 import 'expense_detail_screen.dart';
 import 'income_input_screen.dart';
 import 'history_screen.dart';
 import 'chart_screen.dart';
 import 'split_screen.dart';
+import 'backup_screen.dart';
 
 final _yen = NumberFormat('#,###', 'ja_JP');
 
@@ -51,6 +53,13 @@ class HomeScreen extends StatelessWidget {
                     style: TextStyle(color: Colors.white, fontSize: 13)),
               ),
               const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'バックアップ',
+                onPressed: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const BackupScreen())),
+                icon: const Icon(Icons.backup_outlined,
+                    color: Colors.white, size: 20),
+              ),
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: _HeaderContent(p: p),
@@ -221,7 +230,11 @@ class _HeaderContent extends StatelessWidget {
     final ratio = p.budgetUsageRatio;
     final isOver = remaining < 0;
     final budget = p.availableBudget;
-    final carryover = p.showCarryoverNotification ? p.carryoverDisplay : 0;
+    final carryover = p.carryoverDisplay;
+    // 繰越を除く今月の使用可能ベース（通常予算＋特別収入の使用可能分）
+    final usableBase = budget + p.specialIncomeUsable;
+    // 通常予算が未設定でも、特別収入や繰越があれば残高を表示する
+    final hasBalance = usableBase > 0 || carryover != 0;
 
     return Container(
       color: const Color(0xFF1A1A2E),
@@ -233,7 +246,7 @@ class _HeaderContent extends StatelessWidget {
               style: TextStyle(color: Color(0x80FFFFFF), fontSize: 12)),
           const SizedBox(height: 4),
           Text(
-            budget > 0 ? '¥${_yen.format(remaining)}' : '未設定',
+            hasBalance ? '¥${_yen.format(remaining)}' : '未設定',
             style: TextStyle(
               color: isOver ? const Color(0xFFFF8A8A) : Colors.white,
               fontSize: 42,
@@ -242,12 +255,12 @@ class _HeaderContent extends StatelessWidget {
               height: 1,
             ),
           ),
-          if (budget > 0) ...[
+          if (hasBalance) ...[
             const SizedBox(height: 4),
             Text(
               carryover != 0
-                  ? '予算 ¥${_yen.format(budget)} ${carryover >= 0 ? "＋" : "−"} 前月繰越 ¥${_yen.format(carryover.abs())}'
-                  : '予算 ¥${_yen.format(budget)} のうち残り${((1 - ratio) * 100).toInt()}%',
+                  ? '使用可能 ¥${_yen.format(usableBase)} ${carryover >= 0 ? "＋" : "−"} 前月繰越 ¥${_yen.format(carryover.abs())}'
+                  : '使用可能 ¥${_yen.format(usableBase)} のうち残り${((1 - ratio) * 100).toInt()}%',
               style: const TextStyle(
                   color: Color(0x66FFFFFF), fontSize: 11),
             ),
@@ -488,8 +501,11 @@ class _ExpenseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isRequired = expense.necessity == NecessityType.required;
     final hasMemo = expense.memo != null && expense.memo!.trim().isNotEmpty;
+    final route = expense.transportRoute;
     final title = hasMemo ? expense.memo! : expense.displayLabel;
-    final sub = hasMemo ? expense.displayLabel : null;
+    final sub = hasMemo
+        ? (route != null ? '${expense.displayLabel}・$route' : expense.displayLabel)
+        : route;
 
     return GestureDetector(
       onTap: () => Navigator.push(context,
@@ -570,6 +586,12 @@ class _ExpenseCard extends StatelessWidget {
                       _badge(isRequired ? '要' : '不',
                           isRequired ? const Color(0xFF2563EB) : const Color(0xFFDC2626),
                           isRequired ? const Color(0xFFDBEAFE) : const Color(0xFFFEE2E2)),
+                      if (expense.category == ExpenseCategory.transport &&
+                          expense.transportMeans != null)
+                        _badge(
+                          '${expense.transportMeans!.emoji} ${expense.transportMeans!.label}',
+                          const Color(0xFF0369A1),
+                          const Color(0xFFE0F2FE)),
                       if (expense.isRecurring)
                         _badge('🔁 毎月', const Color(0xFF7C3AED), const Color(0xFFEDE9FE)),
                       if (expense.hasSplit)

@@ -7,6 +7,8 @@ import 'dart:io';
 import '../providers/app_provider.dart';
 import '../models/expense.dart';
 import '../models/split_type.dart';
+import '../models/transport_means.dart';
+import 'photo_view_screen.dart';
 
 final _yen = NumberFormat('#,###', 'ja_JP');
 
@@ -23,12 +25,15 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
   final _customLabelCtrl = TextEditingController();
   final _memoCtrl = TextEditingController();
   final _customPctCtrl = TextEditingController(text: '50');
+  final _fromCtrl = TextEditingController();
+  final _toCtrl = TextEditingController();
 
   ExpenseCategory _category = ExpenseCategory.food;
   NecessityType _necessity = NecessityType.required;
   bool _isRecurring = false;
   String? _photoPath;
   bool _saving = false;
+  TransportMeans _transportMeans = TransportMeans.train;
 
   SplitType _splitType = SplitType.none;
   int _splitPercent = 0;
@@ -52,6 +57,9 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
       _photoPath = e.photoPath;
       if (e.customLabel != null) _customLabelCtrl.text = e.customLabel!;
       if (e.memo != null) _memoCtrl.text = e.memo!;
+      _transportMeans = e.transportMeans ?? TransportMeans.train;
+      if (e.transportFrom != null) _fromCtrl.text = e.transportFrom!;
+      if (e.transportTo != null) _toCtrl.text = e.transportTo!;
       _splitType = e.splitType;
       _splitPercent = e.splitPercent;
       if (e.splitType == SplitType.custom) {
@@ -65,6 +73,7 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
     ExpenseCategory.food,
     ExpenseCategory.goods,
     ExpenseCategory.service,
+    ExpenseCategory.transport,
     ExpenseCategory.fixed,
     ExpenseCategory.custom,
   ];
@@ -152,6 +161,10 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
       _splitPercent = pct;
     }
 
+    final isTransport = _category == ExpenseCategory.transport;
+    final tFrom = _fromCtrl.text.trim();
+    final tTo = _toCtrl.text.trim();
+
     setState(() => _saving = true);
     final p = context.read<AppProvider>();
     if (_isEdit) {
@@ -164,6 +177,9 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
         memo: _memoCtrl.text.trim().isEmpty ? null : _memoCtrl.text.trim(),
         photoPath: _photoPath,
         isRecurring: _isRecurring,
+        transportMeans: isTransport ? _transportMeans : null,
+        transportFrom: isTransport && tFrom.isNotEmpty ? tFrom : null,
+        transportTo: isTransport && tTo.isNotEmpty ? tTo : null,
         splitType: _splitType,
         splitPercent: _splitPercent,
       );
@@ -176,6 +192,9 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
         memo: _memoCtrl.text.trim().isEmpty ? null : _memoCtrl.text.trim(),
         photoPath: _photoPath,
         isRecurring: _isRecurring,
+        transportMeans: isTransport ? _transportMeans : null,
+        transportFrom: isTransport && tFrom.isNotEmpty ? tFrom : null,
+        transportTo: isTransport && tTo.isNotEmpty ? tTo : null,
         splitType: _splitType,
         splitPercent: _splitPercent,
       );
@@ -348,6 +367,36 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
                 ],
               ])),
 
+              // 交通費（手段・出発地・行先）
+              if (_category == ExpenseCategory.transport) ...[
+                const SizedBox(height: 12),
+                _card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('交通手段', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF374151))),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    _transportBtn(TransportMeans.bus),
+                    const SizedBox(width: 6),
+                    _transportBtn(TransportMeans.train),
+                    const SizedBox(width: 6),
+                    _transportBtn(TransportMeans.other),
+                  ]),
+                  const SizedBox(height: 16),
+                  const Text('出発地', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF374151))),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _fromCtrl,
+                    decoration: const InputDecoration(hintText: '例：渋谷駅', border: OutlineInputBorder(), isDense: true),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('行先', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF374151))),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _toCtrl,
+                    decoration: const InputDecoration(hintText: '例：新宿駅', border: OutlineInputBorder(), isDense: true),
+                  ),
+                ])),
+              ],
+
               const SizedBox(height: 12),
 
               // 要・不
@@ -390,7 +439,16 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
               const Text('写真', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF374151))),
               const SizedBox(height: 8),
               if (_photoPath != null) ...[
-                ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(_photoPath!), height: 120, width: double.infinity, fit: BoxFit.cover)),
+                GestureDetector(
+                  onTap: () => openPhotoView(context, _photoPath!, 'photo_input'),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Hero(
+                      tag: 'photo_input',
+                      child: Image.file(File(_photoPath!), height: 120, width: double.infinity, fit: BoxFit.cover),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
               ],
               GestureDetector(
@@ -456,6 +514,26 @@ class _ExpenseInputScreenState extends State<ExpenseInputScreen> {
         Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
         Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: valueColor)),
       ]);
+
+  Widget _transportBtn(TransportMeans t) {
+    final active = _transportMeans == t;
+    return Expanded(child: GestureDetector(
+      onTap: () => setState(() => _transportMeans = t),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF1A1A2E) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: active ? const Color(0xFF1A1A2E) : const Color(0xFFE2E8F0), width: 1.5),
+        ),
+        child: Column(children: [
+          Text(t.emoji, style: const TextStyle(fontSize: 18)),
+          const SizedBox(height: 2),
+          Text(t.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? Colors.white : const Color(0xFF64748B))),
+        ]),
+      ),
+    ));
+  }
 
   Widget _necessityBtn(NecessityType t, String label, Color color) {
     final active = _necessity == t;
