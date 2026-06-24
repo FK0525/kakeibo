@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 import 'dart:io';
 import '../providers/app_provider.dart';
 import '../models/expense.dart';
+import '../models/transport_means.dart';
 import 'expense_input_screen.dart';
 import 'income_input_screen.dart';
+import 'photo_view_screen.dart';
 
 final _yen = NumberFormat('#,###', 'ja_JP');
 
@@ -228,6 +230,18 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
               if (e.memo != null) _row('メモ', e.memo!),
             ]),
 
+            // 交通費の詳細表示
+            if (e.category == ExpenseCategory.transport && !e.isIncome) ...[
+              const SizedBox(height: 14),
+              _detailCard([
+                if (e.transportMeans != null)
+                  _row('手段',
+                      '${e.transportMeans!.emoji} ${e.transportMeans!.label}'),
+                if (e.transportRoute != null)
+                  _row('経路', e.transportRoute!),
+              ]),
+            ],
+
             // 特別収入の配分表示
             if (e.entryType == EntryType.specialIncome) ...[
               const SizedBox(height: 14),
@@ -422,15 +436,42 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
               ),
             ],
 
-            // 写真
+            // 写真（タップで全画面表示）
             if (e.photoPath != null) ...[
               const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.file(File(e.photoPath!),
-                    width: double.infinity,
-                    height: 200,
-                    fit: BoxFit.cover),
+              GestureDetector(
+                onTap: () =>
+                    openPhotoView(context, e.photoPath!, 'photo_${e.id}'),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Stack(
+                    children: [
+                      Hero(
+                        tag: 'photo_${e.id}',
+                        child: Image.file(File(e.photoPath!),
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover),
+                      ),
+                      const Positioned(
+                        right: 8,
+                        bottom: 8,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black45,
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(8)),
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Icon(Icons.fullscreen,
+                                color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ],

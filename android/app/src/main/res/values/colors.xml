@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- アダプティブアイコンの背景（アイコン画像は全面不透明なので、マスクのはみ出し部分用） -->
+    <color name="ic_launcher_background">#FDFDFD</color>
+</resources>
