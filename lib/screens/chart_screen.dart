@@ -19,18 +19,24 @@ class ChartScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final spent = expenses.where((e) => !e.isIncome);
+    // 固定費は円グラフから除外
+    final spent = expenses.where((e) => !e.isIncome && e.category != ExpenseCategory.fixed);
+    final fixedItems = expenses.where((e) => !e.isIncome && e.category == ExpenseCategory.fixed).toList();
+    final fixedTotal = fixedItems.fold<int>(0, (s, e) => s + e.amount);
+
     final required = spent
         .where((e) => e.necessity == NecessityType.required)
         .fold(0, (s, e) => s + e.amount);
     final unnecessary = spent
         .where((e) => e.necessity == NecessityType.unnecessary)
         .fold(0, (s, e) => s + e.amount);
-    final remaining = (budget - required - unnecessary).clamp(0, budget);
+    final remaining = budget > 0
+        ? (budget - required - unnecessary).clamp(0, budget)
+        : 0;
 
     final total = budget > 0 ? budget : (required + unnecessary);
 
-    // カテゴリ別集計
+    // カテゴリ別集計（固定費除く）
     final Map<String, int> categoryRequired = {};
     final Map<String, int> categoryUnnecessary = {};
     for (final e in spent) {
@@ -230,6 +236,92 @@ class ChartScreen extends StatelessWidget {
                 ],
               ),
             ),
+
+            // 固定費セクション
+            if (fixedItems.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: const Border(
+                    left: BorderSide(color: Color(0xFF6366F1), width: 3),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1))
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Text('🏠 固定費',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF374151))),
+                      const Spacer(),
+                      Text('¥${_yen.format(fixedTotal)}',
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF6366F1))),
+                    ]),
+                    const SizedBox(height: 6),
+                    Text(
+                      '※ 予算・グラフからは除外されています',
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.grey.shade500),
+                    ),
+                    const SizedBox(height: 12),
+                    ...fixedItems.map((e) {
+                      final title = e.memo?.trim().isNotEmpty == true
+                          ? e.memo!
+                          : (e.customLabel ?? '固定費');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(children: [
+                          const Text('🏠', style: TextStyle(fontSize: 14)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF374151))),
+                          ),
+                          if (e.isRecurring)
+                            Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('🔁 毎月',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      color: Color(0xFF6366F1),
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          Text('¥${_yen.format(e.amount)}',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1E293B))),
+                        ]),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

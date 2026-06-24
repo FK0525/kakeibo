@@ -63,7 +63,7 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
   // 編集画面を開く
   void _openEdit() {
     final e = widget.expense;
-    if (e.isIncome) {
+    if (e.entryType == EntryType.specialIncome) {
       // 特別収入の編集
       Navigator.push(
         context,
@@ -71,6 +71,17 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
           builder: (_) => _SpecialIncomeEditScreen(expense: e),
         ),
       ).then((_) => Navigator.pop(context));
+    } else if (e.entryType == EntryType.income) {
+      // 通常収入の編集
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => _IncomeEditScreen(expense: e),
+        ),
+      ).then((_) => Navigator.pop(context));
+    } else if (e.isIncome) {
+      // 繰越・割勘精算は編集なし、何もしない
+      return;
     } else {
       // 支出の編集
       Navigator.push(
@@ -95,7 +106,13 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
     if (e.isIncome) {
       heroBadgeColor = const Color(0xFF22C55E).withOpacity(0.25);
       heroBadgeText = const Color(0xFF6EE7B7);
-      heroBadgeLabel = e.entryType == EntryType.carryover ? '↩️ 前月繰越' : '🎁 特別収入';
+      switch (e.entryType) {
+        case EntryType.carryover:       heroBadgeLabel = '↩️ 前月繰越'; break;
+        case EntryType.specialIncome:   heroBadgeLabel = '🎁 特別収入'; break;
+        case EntryType.income:          heroBadgeLabel = '💼 収入'; break;
+        case EntryType.splitSettlement: heroBadgeLabel = '🤝 割り勘精算'; break;
+        default:                        heroBadgeLabel = '収入';
+      }
     } else {
       heroBadgeColor = isRequired
           ? const Color(0xFF2563EB).withOpacity(0.25)
@@ -685,6 +702,167 @@ class _SpecialIncomeEditScreenState extends State<_SpecialIncomeEditScreen> {
               ]),
             ),
             const SizedBox(height: 20),
+            const Text('メモ',
+                style: TextStyle(
+                    color: Color(0x80FFFFFF),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _memoCtrl,
+              maxLines: 2,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'メモを入力（任意）',
+                hintStyle: const TextStyle(color: Color(0x66FFFFFF)),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF1A1A2E),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  textStyle: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+                child: const Text('保存する'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 通常収入の編集画面
+class _IncomeEditScreen extends StatefulWidget {
+  final Expense expense;
+  const _IncomeEditScreen({required this.expense});
+
+  @override
+  State<_IncomeEditScreen> createState() => _IncomeEditScreenState();
+}
+
+class _IncomeEditScreenState extends State<_IncomeEditScreen> {
+  late final TextEditingController _amountCtrl;
+  late final TextEditingController _memoCtrl;
+  final _yen = NumberFormat('#,###', 'ja_JP');
+
+  @override
+  void initState() {
+    super.initState();
+    _amountCtrl = TextEditingController(text: widget.expense.amount.toString());
+    _memoCtrl = TextEditingController(text: widget.expense.memo ?? '');
+  }
+
+  int get _amount => int.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0;
+
+  Future<void> _submit() async {
+    if (_amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('金額を入力してください')),
+      );
+      return;
+    }
+    await context.read<AppProvider>().updateExpense(
+          id: widget.expense.id,
+          amount: _amount,
+          category: widget.expense.category,
+          necessity: widget.expense.necessity,
+          memo: _memoCtrl.text.trim().isEmpty ? null : _memoCtrl.text.trim(),
+        );
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1A1A2E),
+      appBar: AppBar(
+        title: const Text('💼 収入を編集'),
+        backgroundColor: const Color(0xFF1A1A2E),
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('金額',
+                style: TextStyle(
+                    color: Color(0x80FFFFFF),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 8),
+            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              const Text('¥',
+                  style: TextStyle(color: Color(0x66FFFFFF), fontSize: 28)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _amountCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 44,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -1),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    hintText: '0',
+                    hintStyle: TextStyle(color: Color(0x33FFFFFF)),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF22C55E).withOpacity(0.3)),
+              ),
+              child: Row(children: [
+                const Text('💰',
+                    style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('使用可能予算 + 貯金',
+                          style: TextStyle(
+                              color: Color(0x80FFFFFF), fontSize: 11)),
+                      Text('¥${_yen.format((_amount / 2).floor())} × 2',
+                          style: const TextStyle(
+                              color: Color(0xFF6EE7B7),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 24),
             const Text('メモ',
                 style: TextStyle(
                     color: Color(0x80FFFFFF),

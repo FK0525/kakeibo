@@ -28,17 +28,24 @@ class AppProvider extends ChangeNotifier {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
-  // 支出合計（収入系除く、割り勘は自己負担分のみ）
+  // 固定費（カテゴリが固定費のもの）
+  List<Expense> get fixedExpenses => currentMonthExpenses
+      .where((e) => !e.isIncome && e.category == ExpenseCategory.fixed)
+      .toList();
+
+  int get totalFixedCost => fixedExpenses.fold(0, (s, e) => s + e.selfAmount);
+
+  // 支出合計（収入系除く、固定費除く、割り勘は自己負担分のみ）
   int get totalSpent => currentMonthExpenses
-      .where((e) => !e.isIncome)
+      .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed)
       .fold(0, (s, e) => s + e.selfAmount);
 
   int get requiredSpent => currentMonthExpenses
-      .where((e) => !e.isIncome && e.necessity == NecessityType.required)
+      .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed && e.necessity == NecessityType.required)
       .fold(0, (s, e) => s + e.selfAmount);
 
   int get unnecessarySpent => currentMonthExpenses
-      .where((e) => !e.isIncome && e.necessity == NecessityType.unnecessary)
+      .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed && e.necessity == NecessityType.unnecessary)
       .fold(0, (s, e) => s + e.selfAmount);
 
   // 特別収入の使用可能分合計
@@ -66,18 +73,41 @@ class AppProvider extends ChangeNotifier {
 
   int get carryoverDisplay => carryoverAmount;
 
-  // 使用可能残高 = 予算 + 特別収入使用可能分 + 繰越 - 支出
+  // 今月の通常収入合計（Expenseとして記録された分）
+  int get monthlyIncome => currentMonthExpenses
+      .where((e) => e.entryType == EntryType.income)
+      .fold(0, (s, e) => s + e.amount);
+
+  // 通常収入が入力されているか
+  bool get hasIncome => monthlyIncome > 0 || _monthly.income > 0;
+
+  // 使用可能予算 = (収入 - 固定費) ÷ 2
+  int get availableBudget {
+    // 新方式（monthlyIncome）を優先、なければ旧方式（_monthly.income）
+    final income = monthlyIncome > 0 ? monthlyIncome : _monthly.income;
+    final base = income - totalFixedCost;
+    return (base / 2).floor();
+  }
+
+  // 貯金予定 = (収入 - 固定費) ÷ 2
+  int get savingsTarget {
+    final income = monthlyIncome > 0 ? monthlyIncome : _monthly.income;
+    final base = income - totalFixedCost;
+    return (base / 2).floor();
+  }
+
+  // 使用可能残高 = 予算 + 特別収入使用可能分 + 繰越 - 支出（固定費除く）
   int get remainingBudget {
-    final base = _monthly.availableBudget + specialIncomeUsable - totalSpent;
+    final base = availableBudget + specialIncomeUsable - totalSpent;
     if (showCarryoverNotification) return base + carryoverAmount;
     return base;
   }
 
   // 今月の貯金予定 = 通常貯金 + 特別収入貯金分
-  int get totalSavings => _monthly.savingsTarget + specialIncomeSavings;
+  int get totalSavings => savingsTarget + specialIncomeSavings;
 
   double get budgetUsageRatio {
-    final budget = _monthly.availableBudget +
+    final budget = availableBudget +
         specialIncomeUsable +
         (showCarryoverNotification ? carryoverAmount : 0);
     if (budget <= 0) return 0;
@@ -155,8 +185,19 @@ class AppProvider extends ChangeNotifier {
     await prefs.setString('expenses', Expense.listToJson(_expenses));
   }
 
-  Future<void> setIncome(int income) async {
-    _monthly = _monthly.copyWith(income: income, incomeEntered: true);
+  // 通常収入を追加（Expenseエントリとして記録）
+  Future<void> setIncome(int income, {String? memo}) async {
+    _expenses.insert(0, Expense(
+      id: _uuid.v4(),
+      amount: income,
+      category: ExpenseCategory.custom,
+      necessity: NecessityType.required,
+      date: DateTime.now(),
+      entryType: EntryType.income,
+      memo: memo,
+    ));
+    _monthly = _monthly.copyWith(incomeEntered: true);
+    await _saveExpenses();
     await _saveMonthly();
     notifyListeners();
   }

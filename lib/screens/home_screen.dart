@@ -36,12 +36,21 @@ class HomeScreen extends StatelessWidget {
               TextButton.icon(
                 onPressed: () => Navigator.push(context,
                     MaterialPageRoute(
+                        builder: (_) => const IncomeInputScreen())),
+                icon: const Icon(Icons.account_balance_wallet_outlined, color: Colors.white, size: 16),
+                label: const Text('収入',
+                    style: TextStyle(color: Colors.white, fontSize: 13)),
+              ),
+              TextButton.icon(
+                onPressed: () => Navigator.push(context,
+                    MaterialPageRoute(
                         builder: (_) =>
                             const IncomeInputScreen(isSpecial: true))),
                 icon: const Icon(Icons.add, color: Colors.white, size: 16),
                 label: const Text('特別収入',
                     style: TextStyle(color: Colors.white, fontSize: 13)),
               ),
+              const SizedBox(width: 4),
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: _HeaderContent(p: p),
@@ -75,7 +84,7 @@ class HomeScreen extends StatelessWidget {
                           builder: (_) => ChartScreen(
                             monthKey: key,
                             expenses: p.currentMonthExpenses,
-                            budget: p.monthly.availableBudget + p.specialIncomeUsable,
+                            budget: p.availableBudget + p.specialIncomeUsable,
                           ),
                         ));
                       },
@@ -211,7 +220,7 @@ class _HeaderContent extends StatelessWidget {
     final remaining = p.remainingBudget;
     final ratio = p.budgetUsageRatio;
     final isOver = remaining < 0;
-    final budget = p.monthly.availableBudget;
+    final budget = p.availableBudget;
     final carryover = p.showCarryoverNotification ? p.carryoverDisplay : 0;
 
     return Container(
@@ -385,6 +394,7 @@ class _IncomeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isCarryover = expense.entryType == EntryType.carryover;
     final isSettlement = expense.entryType == EntryType.splitSettlement;
+    final isRegularIncome = expense.entryType == EntryType.income;
     final hasMemo = expense.memo != null && expense.memo!.trim().isNotEmpty;
     final title = hasMemo ? expense.memo! : expense.displayLabel;
     final sub = hasMemo ? expense.displayLabel : null;
@@ -392,6 +402,7 @@ class _IncomeCard extends StatelessWidget {
     String emoji;
     if (isCarryover) emoji = '↩️';
     else if (isSettlement) emoji = '🤝';
+    else if (isRegularIncome) emoji = '💼';
     else emoji = '🎁';
 
     return GestureDetector(
@@ -445,7 +456,9 @@ class _IncomeCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(100)),
                       child: Text(
-                        isCarryover ? '↩️ 繰越' : (isSettlement ? '🤝 精算' : '🎁 収入'),
+                        isCarryover ? '↩️ 繰越' :
+                        isSettlement ? '🤝 精算' :
+                        isRegularIncome ? '💼 収入' : '🎁 特別収入',
                         style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
                       ),
                     ),

@@ -110,18 +110,18 @@ class _HistoryScreenState extends State<HistoryScreen>
                       ...last6.map((key) {
                         final list = grouped[key] ?? [];
                         final total = list
-                            .where((e) => !e.isIncome)
+                            .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed)
                             .fold(0, (s, e) => s + e.amount);
                         final allMax = last6.map((k) {
                           return (grouped[k] ?? [])
-                              .where((e) => !e.isIncome)
+                              .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed)
                               .fold(0, (s, e) => s + e.amount);
                         }).reduce((a, b) => a > b ? a : b);
 
                         final ratio =
                             allMax > 0 ? total / allMax : 0.0;
                         final isOver = total >
-                            p.monthly.availableBudget;
+                            p.availableBudget;
                         final parts = key.split('-');
                         final label =
                             '${int.parse(parts[1])}月';
@@ -183,7 +183,7 @@ class _HistoryScreenState extends State<HistoryScreen>
                       if (grouped.isEmpty) return '¥0';
                       final total = grouped.values
                           .expand((e) => e)
-                          .where((e) => !e.isIncome)
+                          .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed)
                           .fold(0, (s, e) => s + e.amount);
                       return '¥${_yen.format(total ~/ grouped.length)}';
                     }()),
@@ -192,7 +192,7 @@ class _HistoryScreenState extends State<HistoryScreen>
                       final total = grouped.values
                           .expand((e) => e)
                           .where((e) =>
-                              !e.isIncome &&
+                              !e.isIncome && e.category != ExpenseCategory.fixed &&
                               e.necessity == NecessityType.required)
                           .fold(0, (s, e) => s + e.amount);
                       return '¥${_yen.format(total ~/ grouped.length)}';
@@ -203,7 +203,7 @@ class _HistoryScreenState extends State<HistoryScreen>
                       final total = grouped.values
                           .expand((e) => e)
                           .where((e) =>
-                              !e.isIncome &&
+                              !e.isIncome && e.category != ExpenseCategory.fixed &&
                               e.necessity == NecessityType.unnecessary)
                           .fold(0, (s, e) => s + e.amount);
                       return '¥${_yen.format(total ~/ grouped.length)}';
@@ -228,7 +228,7 @@ class _HistoryScreenState extends State<HistoryScreen>
                 ...months.map((key) => _MonthCard(
                       monthKey: key,
                       expenses: grouped[key] ?? [],
-                      budget: p.monthly.availableBudget,
+                      budget: p.availableBudget,
                       isCurrent: _isCurrentMonth(key),
                       monthLabel: _monthLabel(key),
                     )),
@@ -247,7 +247,7 @@ class _HistoryScreenState extends State<HistoryScreen>
               return _MonthCard(
                 monthKey: key,
                 expenses: list,
-                budget: p.monthly.availableBudget,
+                budget: p.availableBudget,
                 isCurrent: _isCurrentMonth(key),
                 monthLabel: _monthLabel(key),
               );
@@ -316,15 +316,18 @@ class _MonthCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = expenses
-        .where((e) => !e.isIncome)
+        .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed)
         .fold(0, (s, e) => s + e.amount);
     final req = expenses
-        .where((e) => !e.isIncome && e.necessity == NecessityType.required)
+        .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed && e.necessity == NecessityType.required)
         .fold(0, (s, e) => s + e.amount);
     final unneeded = expenses
-        .where((e) => !e.isIncome && e.necessity == NecessityType.unnecessary)
+        .where((e) => !e.isIncome && e.category != ExpenseCategory.fixed && e.necessity == NecessityType.unnecessary)
         .fold(0, (s, e) => s + e.amount);
-    final count = expenses.where((e) => !e.isIncome).length;
+    final fixedTotal = expenses
+        .where((e) => !e.isIncome && e.category == ExpenseCategory.fixed)
+        .fold(0, (s, e) => s + e.amount);
+    final count = expenses.where((e) => !e.isIncome && e.category != ExpenseCategory.fixed).length;
 
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -399,6 +402,31 @@ class _MonthCard extends StatelessWidget {
                   countLabel: '$count件'),
             ]),
           ),
+          if (fixedTotal > 0)
+            Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF5F3FF),
+                border: Border(
+                    top: BorderSide(color: Color(0xFFEEF2FF))),
+              ),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 8),
+              child: Row(children: [
+                const Text('🏠', style: TextStyle(fontSize: 13)),
+                const SizedBox(width: 6),
+                const Text('固定費（予算外）',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF6366F1),
+                        fontWeight: FontWeight.w700)),
+                const Spacer(),
+                Text('¥${_yen.format(fixedTotal)}',
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF6366F1))),
+              ]),
+            ),
         ]),
       ),
     );

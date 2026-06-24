@@ -5,7 +5,7 @@ enum NecessityType { required, unnecessary }
 
 enum ExpenseCategory { music, food, goods, service, fixed, custom }
 
-enum EntryType { expense, specialIncome, carryover, splitSettlement }
+enum EntryType { expense, income, specialIncome, carryover, splitSettlement }
 
 extension ExpenseCategoryExt on ExpenseCategory {
   String get label {
@@ -77,6 +77,7 @@ class Expense {
 
   String get displayLabel {
     switch (entryType) {
+      case EntryType.income:           return '収入';
       case EntryType.specialIncome:    return '特別収入';
       case EntryType.carryover:        return '前月繰越';
       case EntryType.splitSettlement:  return '割り勘精算';
@@ -85,6 +86,7 @@ class Expense {
   }
 
   bool get isIncome =>
+      entryType == EntryType.income ||
       entryType == EntryType.specialIncome ||
       entryType == EntryType.carryover ||
       entryType == EntryType.splitSettlement;
